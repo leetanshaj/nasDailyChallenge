@@ -1,12 +1,6 @@
-import requests
-import re
-from flask import Flask, request, Response, current_app, render_template, jsonify
-import json
-from datetime import datetime
-from dateutil import tz
-import threading
-import os
+import re,os
 os.system('clear')
+
 class DataValidator:
     def __init__(self):
         self.carRegex = r'^\w{2}\d{2}\w{2}\d{4}\b' #AA00BB1234
@@ -19,10 +13,14 @@ class DataValidator:
 
     def isValidSlotId(self, slotNumber):
         if not slotNumber:
+            print(7)
             return False
         regex = re.compile(self.slotRegex)
         if not regex.match(str(slotNumber)) is None:
-            return slotNumber in self.slotRange
+            # print(regex.match(str(slotNumber)))
+            # print(slotNumber in self.slotRange)
+            
+            return int(slotNumber) in self.slotRange
 
 
 
@@ -46,11 +44,14 @@ class ParkingLot(DataValidator):
             print("Parking Lot Is Empty, Good Morning") #Debug Checking
         if not self.slotsAvailable:
             response["error"] = "Parking Lot Full"
-            return response
+            return response,400
         if not self.emptySlots:
             self.slotsAvailable = False
             response["error"] = "Parking Lot Full"
-            return response
+            return response,400
+        if not carNumber:
+            response['error'] = "Empty Car Number"
+            return response,400
         if self.isValidCarNumber(carNumber):
             if self.carDataStructure and self.carDataStructure.get(carNumber):
                 return self.fetchInfo(carNumber, alrdyParked= True)
@@ -66,28 +67,27 @@ class ParkingLot(DataValidator):
                 self.slotsAvailable = False
         else:
             response['error'] = "Invalid Car Number! Please Provide Valid Car Number"
-        return response
+        return response, 200 if "error" not in response else 400
 
     def fetchInfo(self, carNumber = None, slotId = None, alrdyParked = False):
         response = dict()
-        flag = False
         if not self.carDataStructure:
             response['error'] = "Parking Lot Is Empty! No Cars Found"
-            return response
-
+            return response,400
         if carNumber:
             if  self.isValidCarNumber(carNumber):
                 if (slotId:=self.carDataStructure.get(carNumber)):
                     response['Car_Number'] = carNumber
                     response['Parking_Slot'] = slotId
                     response['message'] = f"Your Car {carNumber} is {'Already ' if alrdyParked else ''}Parked at Slot Number {slotId}"
-                    return response
+                    return response,200
                 else:
                     response['error'] = "Car Not Parked"
             else:
                 response['error'] = "Invalid Car Number"
-        if slotId:
+        elif slotId:
             if self.isValidSlotId(slotId):
+                slotId = int(slotId)
                 if (carNumber:=self.carDataStructure.get(slotId)):
                     response['Car_Number'] = carNumber
                     response['Parking_Slot'] = slotId
@@ -96,14 +96,15 @@ class ParkingLot(DataValidator):
                     response['error'] = "Slot Empty"
             else:
                 response['error'] = "Invalid Slot Number"
-        return response
+        return response, 200 if "error" not in response else 400
 
 
     def delete(self, slotId: int):
         response = dict()
         if not self.carDataStructure:
             response['error'] = "Parking Lot Is Empty! No Car available to unpark"
-            return response
+            return response,400
+        print(slotId)
         if self.isValidSlotId(slotId):
             if (carNumber:=self.carDataStructure.get(int(slotId))):
                 del self.carDataStructure[carNumber]
@@ -115,19 +116,34 @@ class ParkingLot(DataValidator):
                 response['error'] = f"Slot is Empty! No Car is Parked at Slot {slotId}"
         else:
             response['error'] = "Invalid Slot"
-        return response
+        return response, 200 if "error" not in response else 400
 
 
     def move(self, carNumber = None, slotId = None):
         response = dict()
         if not self.carDataStructure:
             response['error'] = "Parking Lot Is Empty! No Car available to unpark"
-            return response
+            return response,400
         if not self.slotsAvailable:
                 response['error'] = "No Slots Empty! You cannot move your car"
-                return response
-        if self.isValidCarNumber(carNumber):
-            if (slotId:=self.carDataStructure.get(carNumber)):
+                return response,404
+        if carNumber or slotId:
+            if carNumber:
+                if self.isValidCarNumber(carNumber):
+                    slotId=self.carDataStructure.get(carNumber)
+                    if not slotId:
+                        response['error'] = "Car is Not Parked"
+                        return response,400
+                else:
+                    response['error'] = "Invalid Car Number"
+            elif slotId:
+                if self.isValidSlotId(slotId):
+                    slotId = int(slotId)
+                    carNumber=self.carDataStructure.get(slotId)
+                    if not carNumber:
+                        response['error'] = "Car Not Parked"
+            print(slotId, carNumber)
+            if carNumber and slotId:
                 self.carDataStructure[slotId] = None
                 self.emptySlots.append(slotId)
                 NslotId = self.emptySlots[0]
@@ -138,47 +154,39 @@ class ParkingLot(DataValidator):
                 response['newSlot'] = NslotId
                 response['Car_Number'] = carNumber
                 response['message'] = f"Please Shift your Car {carNumber} from Slot {slotId} to New Slot {NslotId}"
-                
-            else:
-                response['error'] = "Car is Not Parked"
-        else:
-            response['error'] = "Invalid Car Number"
-        return response
+        return response, 200 if "error" not in response else 400
 
-             
-
-
-os.system('clear')
-print("#"*100)
-car = ParkingLot(5)
-print(car.delete(2))
-print(car.move('UP80CY8267'))
-print("#Park")
-print(car.insert('UP80CY8263'))
-print(car.insert('UP80CY8264'))
-print(car.insert('UP80CY8265'))
+# os.system('clear')
+# print("#"*100)
+# car = ParkingLot(5)
+# print(car.delete(2))
+# print(car.move('UP80CY8267'))
+# print("#Park")
+# print(car.insert('UP80CY8263'))
+# print(car.insert('UP80CY8264'))
 # print(car.insert('UP80CY8265'))
-print(car.insert('UP80CY8266'))
-print(car.insert('UP80CY8267'))
-print(car.insert('UP80CY8268'))
-print(car.insert('UP80CY8269'))
-print(car.insert(1))
-print(car.emptySlots)
-print(car.slotsAvailable)
-# print("#FetchInfo")
-# print(car.fetchInfo(carNumber='UP80CY8264', slotId='00'))
-
-# print(car.fetchInfo(slotId='a'))
-# print(car.fetchInfo(carNumber='UP80CY826O'))
-
-print("#Delete")
-print(car.delete(20))
-print(car.delete(5))
-# print(car.move('UP80CY8267'))
+# # print(car.insert('UP80CY8265'))
+# print(car.insert('UP80CY8266'))
+# print(car.insert('UP80CY8267'))
+# print(car.insert('UP80CY8268'))
+# print(car.insert('UP80CY8269'))
+# print(car.insert(1))
 # print(car.emptySlots)
+# print(car.slotsAvailable)
+# # print("#FetchInfo")
+# # print(car.fetchInfo(carNumber='UP80CY8264', slotId='00'))
 
-print(car.insert('UP80CY8267'))
-# print(car.move('UP80CY8267'))
+# # print(car.fetchInfo(slotId='a'))
+# # print(car.fetchInfo(carNumber='UP80CY826O'))
+
+# print("#Delete")
+# print(car.delete(20))
+# print(car.delete(5))
+# # print(car.move('UP80CY8267'))
+# # print(car.emptySlots)
+
+# print(car.insert('UP80CY8267'))
+# # print(car.move('UP80CY8267'))
         
 
 
